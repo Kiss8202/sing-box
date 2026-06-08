@@ -38,6 +38,8 @@ mainmenu=(
     "更改配置"
     "查看配置"
     "删除配置"
+    "中转分流"
+    "出入站IP配置"
     "运行管理"
     "更新"
     "卸载"
@@ -389,6 +391,12 @@ create() {
         is_outbounds='outbounds:[{tag:"direct",type:"direct"}]'
         is_server_config_json=$(jq "{$is_log,$is_dns,$is_ntp$is_outbounds}" <<<{})
         cat <<<$is_server_config_json >$is_config_json
+        # 应用中转和分流配置
+        load relay.sh
+        load_relays_from_file
+        load route.sh
+        load_domain_routes_from_file_init
+        apply_relay_and_routes_to_config
         manage restart &
         ;;
     esac
@@ -1000,7 +1008,6 @@ add() {
                 get_port
                 is_https_port=$tmp_port
                 warn "端口 (80 或 443) 已经被占用, 你也可以考虑使用 no-auto-tls"
-                msg "\e[41m no-auto-tls 帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)\n"
                 msg "\n Caddy 将使用非标准端口实现自动配置 TLS, HTTP:$is_http_port HTTPS:$is_https_port\n"
                 msg "请确定是否继续???"
                 pause
@@ -1482,7 +1489,7 @@ info() {
         msg "$a $tt= \e[${is_color}m${is_info_str[$i]}\e[0m"
     done
     if [[ $is_new_install ]]; then
-        warn "首次安装请查看脚本帮助文档: $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
+        warn "首次安装请查看脚本帮助文档: $is_core help"
     fi
     if [[ $is_url ]]; then
         msg "------------- ${info_list[12]} -------------"
@@ -1495,7 +1502,7 @@ info() {
         msg "------------- no-auto-tls INFO -------------"
         msg "端口(port): $port"
         msg "路径(path): $path"
-        msg "\e[41m帮助(help)\e[0m: $(msg_ul https://233boy.com/$is_core/no-auto-tls/)"
+        msg "帮助(help): $is_core help no-auto-tls"
     fi
     footer_msg
 }
@@ -1504,13 +1511,7 @@ info() {
 footer_msg() {
     [[ $is_core_stop && ! $is_new_json ]] && warn "$is_core_name 当前处于停止状态."
     [[ $is_caddy_stop && $host ]] && warn "Caddy 当前处于停止状态."
-    ####### 要点13脸吗只会改我链接的小人 #######
-    unset c n m s b
     msg "------------- END -------------"
-    msg "关注(tg): $(msg_ul https://t.me/tg2333)"
-    msg "文档(doc): $(msg_ul https://233boy.com/$is_core/$is_core-script/)"
-    msg "推广(ads): 机场推荐($is_core_name services): $(msg_ul https://g${c}e${n}t${m}j${s}m${b}s.com/)\n"
-    ####### 要点13脸吗只会改我链接的小人 #######
 }
 
 # URL or qrcode
@@ -1523,7 +1524,6 @@ url_qr() {
             msg "\n\e[${is_color}m${is_url}\e[0m\n"
             footer_msg
         } || {
-            link="https://233boy.github.io/tools/qr.html#${is_url}"
             msg "\n------------- $is_config_name & QR code 二维码 -------------"
             msg
             if [[ $(type -P qrencode) ]]; then
@@ -1532,8 +1532,6 @@ url_qr() {
                 msg "请安装 qrencode: $(_green "$cmd update -y; $cmd install qrencode -y")"
             fi
             msg
-            msg "如果无法正常显示或识别, 请使用下面的链接来生成二维码:"
-            msg "\n\e[4;${is_color}m${link}\e[0m\n"
             footer_msg
         }
     else
@@ -1598,7 +1596,6 @@ update() {
 is_main_menu() {
     msg "\n------------- $is_core_name script $is_sh_ver by $author -------------"
     msg "$is_core_name $is_core_ver: $is_core_status"
-    msg "群组(Chat): $(msg_ul https://t.me/tg233boy)"
     is_main_start=1
     ask mainmenu
     case $REPLY in
@@ -1615,25 +1612,33 @@ is_main_menu() {
         del
         ;;
     5)
+        load relay.sh
+        setup_relay
+        ;;
+    6)
+        load ipconfig.sh
+        ip_config_menu
+        ;;
+    7)
         ask list is_do_manage "启动 停止 重启"
         manage $REPLY &
         msg "\n管理状态执行: $(_green $is_do_manage)\n"
         ;;
-    6)
+    8)
         is_tmp_list=("更新$is_core_name" "更新脚本")
         [[ $is_caddy ]] && is_tmp_list+=("更新Caddy")
         ask list is_do_update null "\n请选择更新:\n"
         update $REPLY
         ;;
-    7)
+    9)
         uninstall
         ;;
-    8)
+    10)
         msg
         load help.sh
         show_help
         ;;
-    9)
+    11)
         ask list is_do_other "启用BBR 查看日志 测试运行 重装脚本 设置DNS"
         case $REPLY in
         1)
@@ -1656,7 +1661,7 @@ is_main_menu() {
             ;;
         esac
         ;;
-    10)
+    12)
         load help.sh
         about
         ;;
@@ -1730,6 +1735,14 @@ main() {
     dns)
         load dns.sh
         dns_set ${@:2}
+        ;;
+    relay)
+        load relay.sh
+        setup_relay
+        ;;
+    ipconfig)
+        load ipconfig.sh
+        ip_config_menu
         ;;
     debug)
         is_debug=1

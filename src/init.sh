@@ -101,6 +101,11 @@ fi
 is_http_port=80
 is_https_port=443
 
+# 中转/分流/IP配置路径
+is_relay_file=$is_core_dir/relays.conf
+is_domain_route_file=$is_core_dir/domain_routes.conf
+is_ip_config_file=$is_core_dir/ip_config.conf
+
 # core ver
 is_core_ver=$($is_core_bin version | head -n1 | cut -d " " -f3)
 
