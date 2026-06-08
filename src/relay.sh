@@ -605,33 +605,34 @@ setup_relay() {
 
 # 为节点配置中转
 relay_bind_node() {
-    if [[ ! -f $is_config_json ]]; then
-        warn "配置文件不存在"
+    if [[ ! -d $is_conf_dir ]]; then
+        warn "配置目录不存在"
         return
     fi
 
-    # 获取所有入站节点
+    # 从 conf 目录下的独立 JSON 文件获取所有入站节点
     local inbound_tags=()
     local inbound_ports=()
     local inbound_protos=()
     local inbound_relays=()
 
-    local inbounds_count=$(jq '.inbounds | length' $is_config_json 2>/dev/null || echo "0")
-    if [[ "$inbounds_count" -eq 0 ]]; then
+    local conf_files=$(ls $is_conf_dir | grep -E -i '\.json$' | sed '/dynamic-port-.*-link/d')
+    if [[ -z "$conf_files" ]]; then
         warn "没有找到入站节点"
         return
     fi
 
-    for ((i=0; i<inbounds_count; i++)); do
-        local tag=$(jq -r ".inbounds[${i}].tag" $is_config_json 2>/dev/null)
-        local port=$(jq -r ".inbounds[${i}].listen_port" $is_config_json 2>/dev/null)
-        local type=$(jq -r ".inbounds[${i}].type" $is_config_json 2>/dev/null)
+    while IFS= read -r conf_file; do
+        [[ -z "$conf_file" ]] && continue
+        local tag=$(jq -r '.inbounds[0].tag' $is_conf_dir/"$conf_file" 2>/dev/null)
+        local port=$(jq -r '.inbounds[0].listen_port' $is_conf_dir/"$conf_file" 2>/dev/null)
+        local type=$(jq -r '.inbounds[0].type' $is_conf_dir/"$conf_file" 2>/dev/null)
         [[ -z "$tag" || "$tag" == "null" ]] && continue
         inbound_tags+=("$tag")
         inbound_ports+=("$port")
         inbound_protos+=("$type")
         inbound_relays+=("direct")
-    done
+    done <<< "$conf_files"
 
     # 从路由规则中恢复中转配置
     local route_rules=$(jq -c '.route.rules[]? // empty' $is_config_json 2>/dev/null)

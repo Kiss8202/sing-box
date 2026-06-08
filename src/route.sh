@@ -121,31 +121,32 @@ domain_route_menu() {
 
 # 添加分流规则
 add_domain_route() {
-    if [[ ! -f $is_config_json ]]; then
-        warn "配置文件不存在"
+    if [[ ! -d $is_conf_dir ]]; then
+        warn "配置目录不存在"
         return
     fi
 
-    # 获取入站节点列表
+    # 从 conf 目录下的独立 JSON 文件获取入站节点列表
     local inbound_tags=()
     local inbound_ports=()
     local inbound_protos=()
 
-    local inbounds_count=$(jq '.inbounds | length' $is_config_json 2>/dev/null || echo "0")
-    if [[ "$inbounds_count" -eq 0 ]]; then
+    local conf_files=$(ls $is_conf_dir | grep -E -i '\.json$' | sed '/dynamic-port-.*-link/d')
+    if [[ -z "$conf_files" ]]; then
         warn "没有找到入站节点"
         return
     fi
 
-    for ((i=0; i<inbounds_count; i++)); do
-        local tag=$(jq -r ".inbounds[${i}].tag" $is_config_json 2>/dev/null)
-        local port=$(jq -r ".inbounds[${i}].listen_port" $is_config_json 2>/dev/null)
-        local type=$(jq -r ".inbounds[${i}].type" $is_config_json 2>/dev/null)
+    while IFS= read -r conf_file; do
+        [[ -z "$conf_file" ]] && continue
+        local tag=$(jq -r '.inbounds[0].tag' $is_conf_dir/"$conf_file" 2>/dev/null)
+        local port=$(jq -r '.inbounds[0].listen_port' $is_conf_dir/"$conf_file" 2>/dev/null)
+        local type=$(jq -r '.inbounds[0].type' $is_conf_dir/"$conf_file" 2>/dev/null)
         [[ -z "$tag" || "$tag" == "null" ]] && continue
         inbound_tags+=("$tag")
         inbound_ports+=("$port")
         inbound_protos+=("$type")
-    done
+    done <<< "$conf_files"
 
     if [[ ${#inbound_tags[@]} -eq 0 ]]; then
         warn "没有可用的入站节点"
